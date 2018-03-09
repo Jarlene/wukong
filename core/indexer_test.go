@@ -3,8 +3,8 @@ package core
 import (
 	"testing"
 
-	"github.com/huichen/wukong/types"
-	"github.com/huichen/wukong/utils"
+	"github.com/Jarlene/wukong/types"
+	"github.com/Jarlene/wukong/utils"
 )
 
 func TestAddKeywords(t *testing.T) {
