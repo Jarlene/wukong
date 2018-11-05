@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/gob"
+	"github.com/Jarlene/wukong/core"
 	"github.com/Jarlene/wukong/types"
 	"github.com/Jarlene/wukong/utils"
 	"os"
@@ -14,60 +15,32 @@ type ScoringFields struct {
 }
 
 func AddDocs(engine *Engine) {
-	docId := uint64(1)
+	docId := uint64(0)
 	engine.IndexDocument(docId, types.DocumentIndexData{
 		Content: "中国有十三亿人口人口",
 		Fields:  ScoringFields{1, 2, 3},
-	}, false)
+	})
 	docId++
 	engine.IndexDocument(docId, types.DocumentIndexData{
 		Content: "中国人口",
 		Fields:  nil,
-	}, false)
+	})
 	docId++
 	engine.IndexDocument(docId, types.DocumentIndexData{
 		Content: "有人口",
 		Fields:  ScoringFields{2, 3, 1},
-	}, false)
+	})
 	docId++
 	engine.IndexDocument(docId, types.DocumentIndexData{
 		Content: "有十三亿人口",
 		Fields:  ScoringFields{2, 3, 3},
-	}, false)
+	})
 	docId++
 	engine.IndexDocument(docId, types.DocumentIndexData{
 		Content: "中国十三亿人口",
 		Fields:  ScoringFields{0, 9, 1},
-	}, false)
-	engine.FlushIndex()
-}
+	})
 
-func addDocsWithLabels(engine *Engine) {
-	docId := uint64(1)
-	engine.IndexDocument(docId, types.DocumentIndexData{
-		Content: "此次百度收购将成中国互联网最大并购",
-		Labels:  []string{"百度", "中国"},
-	}, false)
-	docId++
-	engine.IndexDocument(docId, types.DocumentIndexData{
-		Content: "百度宣布拟全资收购91无线业务",
-		Labels:  []string{"百度"},
-	}, false)
-	docId++
-	engine.IndexDocument(docId, types.DocumentIndexData{
-		Content: "百度是中国最大的搜索引擎",
-		Labels:  []string{"百度"},
-	}, false)
-	docId++
-	engine.IndexDocument(docId, types.DocumentIndexData{
-		Content: "百度在研制无人汽车",
-		Labels:  []string{"百度"},
-	}, false)
-	docId++
-	engine.IndexDocument(docId, types.DocumentIndexData{
-		Content: "BAT是中国互联网三巨头",
-		Labels:  []string{"百度"},
-	}, false)
 	engine.FlushIndex()
 }
 
@@ -82,7 +55,14 @@ func (rule RankByTokenProximity) Score(
 	return []float32{1.0 / (float32(doc.TokenProximity) + 1)}
 }
 
+func reset() {
+	core.DocInfoGroup = make(map[int]*types.DocInfosShard)
+	core.InvertedIndexGroup = make(map[int]*types.InvertedIndexShard)
+	os.RemoveAll("wukong.persistent")
+}
+
 func TestEngineIndexDocument(t *testing.T) {
+	reset()
 	var engine Engine
 	engine.Init(types.EngineInitOptions{
 		SegmenterDictionaries: "../testdata/test_dict.txt",
@@ -104,20 +84,21 @@ func TestEngineIndexDocument(t *testing.T) {
 	utils.Expect(t, "人口", outputs.Tokens[1])
 	utils.Expect(t, "3", len(outputs.Docs))
 
-	utils.Expect(t, "2", outputs.Docs[0].DocId)
+	utils.Expect(t, "1", outputs.Docs[0].DocId)
 	utils.Expect(t, "1000", int(outputs.Docs[0].Scores[0]*1000))
 	utils.Expect(t, "[0 6]", outputs.Docs[0].TokenSnippetLocations)
 
-	utils.Expect(t, "5", outputs.Docs[1].DocId)
+	utils.Expect(t, "4", outputs.Docs[1].DocId)
 	utils.Expect(t, "100", int(outputs.Docs[1].Scores[0]*1000))
 	utils.Expect(t, "[0 15]", outputs.Docs[1].TokenSnippetLocations)
 
-	utils.Expect(t, "1", outputs.Docs[2].DocId)
+	utils.Expect(t, "0", outputs.Docs[2].DocId)
 	utils.Expect(t, "76", int(outputs.Docs[2].Scores[0]*1000))
 	utils.Expect(t, "[0 18]", outputs.Docs[2].TokenSnippetLocations)
 }
 
 func TestReverseOrder(t *testing.T) {
+	reset()
 	var engine Engine
 	engine.Init(types.EngineInitOptions{
 		SegmenterDictionaries: "../testdata/test_dict.txt",
@@ -137,12 +118,13 @@ func TestReverseOrder(t *testing.T) {
 	outputs := engine.Search(types.SearchRequest{Text: "中国人口"})
 	utils.Expect(t, "3", len(outputs.Docs))
 
-	utils.Expect(t, "1", outputs.Docs[0].DocId)
-	utils.Expect(t, "5", outputs.Docs[1].DocId)
-	utils.Expect(t, "2", outputs.Docs[2].DocId)
+	utils.Expect(t, "0", outputs.Docs[0].DocId)
+	utils.Expect(t, "4", outputs.Docs[1].DocId)
+	utils.Expect(t, "1", outputs.Docs[2].DocId)
 }
 
 func TestOffsetAndMaxOutputs(t *testing.T) {
+	reset()
 	var engine Engine
 	engine.Init(types.EngineInitOptions{
 		SegmenterDictionaries: "../testdata/test_dict.txt",
@@ -162,8 +144,8 @@ func TestOffsetAndMaxOutputs(t *testing.T) {
 	outputs := engine.Search(types.SearchRequest{Text: "中国人口"})
 	utils.Expect(t, "2", len(outputs.Docs))
 
-	utils.Expect(t, "5", outputs.Docs[0].DocId)
-	utils.Expect(t, "2", outputs.Docs[1].DocId)
+	utils.Expect(t, "4", outputs.Docs[0].DocId)
+	utils.Expect(t, "1", outputs.Docs[1].DocId)
 }
 
 type TestScoringCriteria struct {
@@ -179,6 +161,7 @@ func (criteria TestScoringCriteria) Score(
 }
 
 func TestSearchWithCriteria(t *testing.T) {
+	reset()
 	var engine Engine
 	engine.Init(types.EngineInitOptions{
 		SegmenterDictionaries: "../testdata/test_dict.txt",
@@ -195,14 +178,15 @@ func TestSearchWithCriteria(t *testing.T) {
 	outputs := engine.Search(types.SearchRequest{Text: "中国人口"})
 	utils.Expect(t, "2", len(outputs.Docs))
 
-	utils.Expect(t, "1", outputs.Docs[0].DocId)
+	utils.Expect(t, "0", outputs.Docs[0].DocId)
 	utils.Expect(t, "18000", int(outputs.Docs[0].Scores[0]*1000))
 
-	utils.Expect(t, "5", outputs.Docs[1].DocId)
+	utils.Expect(t, "4", outputs.Docs[1].DocId)
 	utils.Expect(t, "9000", int(outputs.Docs[1].Scores[0]*1000))
 }
 
 func TestCompactIndex(t *testing.T) {
+	reset()
 	var engine Engine
 	engine.Init(types.EngineInitOptions{
 		SegmenterDictionaries: "../testdata/test_dict.txt",
@@ -216,10 +200,10 @@ func TestCompactIndex(t *testing.T) {
 	outputs := engine.Search(types.SearchRequest{Text: "中国人口"})
 	utils.Expect(t, "2", len(outputs.Docs))
 
-	utils.Expect(t, "5", outputs.Docs[0].DocId)
+	utils.Expect(t, "4", outputs.Docs[0].DocId)
 	utils.Expect(t, "9000", int(outputs.Docs[0].Scores[0]*1000))
 
-	utils.Expect(t, "1", outputs.Docs[1].DocId)
+	utils.Expect(t, "0", outputs.Docs[1].DocId)
 	utils.Expect(t, "6000", int(outputs.Docs[1].Scores[0]*1000))
 }
 
@@ -235,6 +219,7 @@ func (criteria BM25ScoringCriteria) Score(
 }
 
 func TestFrequenciesIndex(t *testing.T) {
+	reset()
 	var engine Engine
 	engine.Init(types.EngineInitOptions{
 		SegmenterDictionaries: "../testdata/test_dict.txt",
@@ -244,49 +229,45 @@ func TestFrequenciesIndex(t *testing.T) {
 		IndexerInitOptions: &types.IndexerInitOptions{
 			IndexType: types.FrequenciesIndex,
 		},
+		NumShards: 2,
 	})
 
 	AddDocs(&engine)
 
 	outputs := engine.Search(types.SearchRequest{Text: "中国人口"})
 	utils.Expect(t, "2", len(outputs.Docs))
+	t.Log(outputs.Docs)
+	utils.Expect(t, "4", outputs.Docs[0].DocId)
+	utils.Expect(t, "2285", int(outputs.Docs[0].Scores[0]*1000))
 
-	utils.Expect(t, "5", outputs.Docs[0].DocId)
-	utils.Expect(t, "2349", int(outputs.Docs[0].Scores[0]*1000))
-
-	utils.Expect(t, "1", outputs.Docs[1].DocId)
-	utils.Expect(t, "2320", int(outputs.Docs[1].Scores[0]*1000))
+	utils.Expect(t, "0", outputs.Docs[1].DocId)
+	utils.Expect(t, "2260", int(outputs.Docs[1].Scores[0]*1000))
 }
 
 func TestRemoveDocument(t *testing.T) {
+	reset()
 	var engine Engine
 	engine.Init(types.EngineInitOptions{
 		SegmenterDictionaries: "../testdata/test_dict.txt",
 		DefaultRankOptions: &types.RankOptions{
 			ScoringCriteria: TestScoringCriteria{},
 		},
+		NumShards: 2,
 	})
 
 	AddDocs(&engine)
-	engine.RemoveDocument(5, false)
-	engine.RemoveDocument(6, false)
-	engine.FlushIndex()
-	engine.IndexDocument(6, types.DocumentIndexData{
-		Content: "中国人口有十三亿",
-		Fields:  ScoringFields{0, 9, 1},
-	}, false)
-	engine.FlushIndex()
+	engine.RemoveDocument(4)
 
 	outputs := engine.Search(types.SearchRequest{Text: "中国人口"})
-	utils.Expect(t, "2", len(outputs.Docs))
+	utils.Expect(t, "1", len(outputs.Docs))
 
-	utils.Expect(t, "6", outputs.Docs[0].DocId)
-	utils.Expect(t, "9000", int(outputs.Docs[0].Scores[0]*1000))
-	utils.Expect(t, "1", outputs.Docs[1].DocId)
-	utils.Expect(t, "6000", int(outputs.Docs[1].Scores[0]*1000))
+	utils.Expect(t, "0", outputs.Docs[0].DocId)
+	utils.Expect(t, "6000", int(outputs.Docs[0].Scores[0]*1000))
 }
 
 func TestEngineIndexDocumentWithTokens(t *testing.T) {
+	reset()
+
 	var engine Engine
 	engine.Init(types.EngineInitOptions{
 		SegmenterDictionaries: "../testdata/test_dict.txt",
@@ -300,7 +281,7 @@ func TestEngineIndexDocumentWithTokens(t *testing.T) {
 		},
 	})
 
-	docId := uint64(1)
+	docId := uint64(0)
 	engine.IndexDocument(docId, types.DocumentIndexData{
 		Content: "",
 		Tokens: []types.TokenData{
@@ -308,7 +289,7 @@ func TestEngineIndexDocumentWithTokens(t *testing.T) {
 			{"人口", []int{18, 24}},
 		},
 		Fields: ScoringFields{1, 2, 3},
-	}, false)
+	})
 	docId++
 	engine.IndexDocument(docId, types.DocumentIndexData{
 		Content: "",
@@ -317,12 +298,13 @@ func TestEngineIndexDocumentWithTokens(t *testing.T) {
 			{"人口", []int{6}},
 		},
 		Fields: ScoringFields{1, 2, 3},
-	}, false)
+	})
 	docId++
 	engine.IndexDocument(docId, types.DocumentIndexData{
 		Content: "中国十三亿人口",
 		Fields:  ScoringFields{0, 9, 1},
-	}, false)
+	})
+
 	engine.FlushIndex()
 
 	outputs := engine.Search(types.SearchRequest{Text: "中国人口"})
@@ -331,48 +313,21 @@ func TestEngineIndexDocumentWithTokens(t *testing.T) {
 	utils.Expect(t, "人口", outputs.Tokens[1])
 	utils.Expect(t, "3", len(outputs.Docs))
 
-	utils.Expect(t, "2", outputs.Docs[0].DocId)
+	utils.Expect(t, "1", outputs.Docs[0].DocId)
 	utils.Expect(t, "1000", int(outputs.Docs[0].Scores[0]*1000))
 	utils.Expect(t, "[0 6]", outputs.Docs[0].TokenSnippetLocations)
 
-	utils.Expect(t, "3", outputs.Docs[1].DocId)
+	utils.Expect(t, "2", outputs.Docs[1].DocId)
 	utils.Expect(t, "100", int(outputs.Docs[1].Scores[0]*1000))
 	utils.Expect(t, "[0 15]", outputs.Docs[1].TokenSnippetLocations)
 
-	utils.Expect(t, "1", outputs.Docs[2].DocId)
+	utils.Expect(t, "0", outputs.Docs[2].DocId)
 	utils.Expect(t, "76", int(outputs.Docs[2].Scores[0]*1000))
 	utils.Expect(t, "[0 18]", outputs.Docs[2].TokenSnippetLocations)
 }
 
-func TestEngineIndexDocumentWithContentAndLabels(t *testing.T) {
-	var engine1, engine2 Engine
-	engine1.Init(types.EngineInitOptions{
-		SegmenterDictionaries: "../data/dictionary.txt",
-		IndexerInitOptions: &types.IndexerInitOptions{
-			IndexType: types.LocationsIndex,
-		},
-	})
-	engine2.Init(types.EngineInitOptions{
-		SegmenterDictionaries: "../data/dictionary.txt",
-		IndexerInitOptions: &types.IndexerInitOptions{
-			IndexType: types.DocIdsIndex,
-		},
-	})
-
-	addDocsWithLabels(&engine1)
-	addDocsWithLabels(&engine2)
-
-	outputs1 := engine1.Search(types.SearchRequest{Text: "百度"})
-	outputs2 := engine2.Search(types.SearchRequest{Text: "百度"})
-	utils.Expect(t, "1", len(outputs1.Tokens))
-	utils.Expect(t, "1", len(outputs2.Tokens))
-	utils.Expect(t, "百度", outputs1.Tokens[0])
-	utils.Expect(t, "百度", outputs2.Tokens[0])
-	utils.Expect(t, "5", len(outputs1.Docs))
-	utils.Expect(t, "5", len(outputs2.Docs))
-}
-
 func TestEngineIndexDocumentWithPersistentStorage(t *testing.T) {
+	reset()
 	gob.Register(ScoringFields{})
 	var engine Engine
 	engine.Init(types.EngineInitOptions{
@@ -387,10 +342,9 @@ func TestEngineIndexDocumentWithPersistentStorage(t *testing.T) {
 		},
 		UsePersistentStorage:    true,
 		PersistentStorageFolder: "wukong.persistent",
-		PersistentStorageShards: 2,
 	})
 	AddDocs(&engine)
-	engine.RemoveDocument(5, true)
+	engine.RemoveDocument(4)
 	engine.Close()
 
 	var engine1 Engine
@@ -406,9 +360,7 @@ func TestEngineIndexDocumentWithPersistentStorage(t *testing.T) {
 		},
 		UsePersistentStorage:    true,
 		PersistentStorageFolder: "wukong.persistent",
-		PersistentStorageShards: 2,
 	})
-	engine1.FlushIndex()
 
 	outputs := engine1.Search(types.SearchRequest{Text: "中国人口"})
 	utils.Expect(t, "2", len(outputs.Tokens))
@@ -416,11 +368,11 @@ func TestEngineIndexDocumentWithPersistentStorage(t *testing.T) {
 	utils.Expect(t, "人口", outputs.Tokens[1])
 	utils.Expect(t, "2", len(outputs.Docs))
 
-	utils.Expect(t, "2", outputs.Docs[0].DocId)
+	utils.Expect(t, "1", outputs.Docs[0].DocId)
 	utils.Expect(t, "1000", int(outputs.Docs[0].Scores[0]*1000))
 	utils.Expect(t, "[0 6]", outputs.Docs[0].TokenSnippetLocations)
 
-	utils.Expect(t, "1", outputs.Docs[1].DocId)
+	utils.Expect(t, "0", outputs.Docs[1].DocId)
 	utils.Expect(t, "76", int(outputs.Docs[1].Scores[0]*1000))
 	utils.Expect(t, "[0 18]", outputs.Docs[1].TokenSnippetLocations)
 
@@ -429,6 +381,7 @@ func TestEngineIndexDocumentWithPersistentStorage(t *testing.T) {
 }
 
 func TestCountDocsOnly(t *testing.T) {
+	reset()
 	var engine Engine
 	engine.Init(types.EngineInitOptions{
 		SegmenterDictionaries: "../testdata/test_dict.txt",
@@ -441,11 +394,11 @@ func TestCountDocsOnly(t *testing.T) {
 		IndexerInitOptions: &types.IndexerInitOptions{
 			IndexType: types.LocationsIndex,
 		},
+		NumShards: 2,
 	})
 
 	AddDocs(&engine)
-	engine.RemoveDocument(5, false)
-	engine.FlushIndex()
+	engine.RemoveDocument(4)
 
 	outputs := engine.Search(types.SearchRequest{Text: "中国人口", CountDocsOnly: true})
 	utils.Expect(t, "0", len(outputs.Docs))
@@ -454,6 +407,7 @@ func TestCountDocsOnly(t *testing.T) {
 }
 
 func TestSearchWithin(t *testing.T) {
+	reset()
 	var engine Engine
 	engine.Init(types.EngineInitOptions{
 		SegmenterDictionaries: "../testdata/test_dict.txt",
@@ -471,8 +425,8 @@ func TestSearchWithin(t *testing.T) {
 	AddDocs(&engine)
 
 	docIds := make(map[uint64]bool)
-	docIds[5] = true
-	docIds[1] = true
+	docIds[4] = true
+	docIds[0] = true
 	outputs := engine.Search(types.SearchRequest{
 		Text:   "中国人口",
 		DocIds: docIds,
@@ -482,11 +436,11 @@ func TestSearchWithin(t *testing.T) {
 	utils.Expect(t, "人口", outputs.Tokens[1])
 	utils.Expect(t, "2", len(outputs.Docs))
 
-	utils.Expect(t, "1", outputs.Docs[0].DocId)
+	utils.Expect(t, "0", outputs.Docs[0].DocId)
 	utils.Expect(t, "76", int(outputs.Docs[0].Scores[0]*1000))
 	utils.Expect(t, "[0 18]", outputs.Docs[0].TokenSnippetLocations)
 
-	utils.Expect(t, "5", outputs.Docs[1].DocId)
+	utils.Expect(t, "4", outputs.Docs[1].DocId)
 	utils.Expect(t, "100", int(outputs.Docs[1].Scores[0]*1000))
 	utils.Expect(t, "[0 15]", outputs.Docs[1].TokenSnippetLocations)
 }

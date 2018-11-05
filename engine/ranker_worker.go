@@ -5,8 +5,9 @@ import (
 )
 
 type rankerAddDocRequest struct {
-	docId  uint64
-	fields interface{}
+	docId           uint64
+	fields          interface{}
+	dealDocInfoChan <-chan bool
 }
 
 type rankerRankRequest struct {
@@ -28,7 +29,15 @@ type rankerRemoveDocRequest struct {
 func (engine *Engine) rankerAddDocWorker(shard int) {
 	for {
 		request := <-engine.rankerAddDocChannels[shard]
-		engine.rankers[shard].AddDoc(request.docId, request.fields)
+		docInfo := engine.rankers[shard].AddDoc(request.docId, request.fields, request.dealDocInfoChan)
+		// save
+		if engine.initOptions.UsePersistentStorage {
+			engine.persistentStorageIndexDocumentChannels[shard] <- persistentStorageIndexDocumentRequest{
+				typ:     "info",
+				docId:   request.docId,
+				docInfo: docInfo,
+			}
+		}
 	}
 }
 

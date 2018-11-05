@@ -7,7 +7,3 @@ func (engine *Engine) NumTokenIndexAdded() uint64 {
 func (engine *Engine) NumDocumentsIndexed() uint64 {
 	return engine.numDocumentsIndexed
 }
-
-func (engine *Engine) NumDocumentsRemoved() uint64 {
-	return engine.numDocumentsRemoved
-}

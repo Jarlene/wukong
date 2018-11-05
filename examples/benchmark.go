@@ -4,17 +4,14 @@ package main
 import (
 	"bufio"
 	"flag"
+	"github.com/Jarlene/wukong/engine"
+	"github.com/Jarlene/wukong/types"
 	"log"
-	"math/rand"
 	"os"
 	"runtime"
 	"runtime/pprof"
 	"strings"
-	"sync"
 	"time"
-
-	"github.com/Jarlene/wukong/engine"
-	"github.com/Jarlene/wukong/types"
 )
 
 const (
@@ -42,7 +39,6 @@ var (
 	cpuprofile                = flag.String("cpuprofile", "", "处理器profile文件")
 	memprofile                = flag.String("memprofile", "", "内存profile文件")
 	num_repeat_text           = flag.Int("num_repeat_text", 10, "文本重复加入多少次")
-	num_delete_docs           = flag.Int("num_delete_docs", 1000, "测试删除文档的个数")
 	index_type                = flag.Int("index_type", types.DocIdsIndex, "索引类型")
 	use_persistent            = flag.Bool("use_persistent", false, "是否使用持久存储")
 	persistent_storage_folder = flag.String("persistent_storage_folder", "benchmark.persistent", "持久存储数据库保存的目录")
@@ -123,16 +119,14 @@ func main() {
 
 	// 建索引
 	log.Print("建索引 ... ")
-	// 打乱 docId 顺序进行测试，若 docId 最大值超 Int 则不能用 rand.Perm 方法
-	docIds := rand.Perm(*num_repeat_text * len(lines))
-	docIdx := 0
+	docId := uint64(1)
 	for i := 0; i < *num_repeat_text; i++ {
 		for _, line := range lines {
-			searcher.IndexDocument(uint64(docIds[docIdx]+1), types.DocumentIndexData{
-				Content: line}, false)
-			docIdx++
-			if docIdx-docIdx/1000000*1000000 == 0 {
-				log.Printf("已索引%d百万文档", docIdx/1000000)
+			searcher.IndexDocument(docId, types.DocumentIndexData{
+				Content: line})
+			docId++
+			if docId-docId/1000000*1000000 == 0 {
+				log.Printf("已索引%d百万文档", docId/1000000)
 				runtime.GC()
 			}
 		}
@@ -146,20 +140,6 @@ func main() {
 	log.Printf("建立索引速度每秒添加 %f 百万个索引",
 		float64(searcher.NumTokenIndexAdded())/t1.Sub(t0).Seconds()/(1000000))
 
-	// 记录时间并计算删除索引时间
-	t2 := time.Now()
-	for i := 1; i <= *num_delete_docs; i++ {
-		searcher.RemoveDocument(uint64(i), false)
-	}
-	searcher.FlushIndex()
-
-	t3 := time.Now()
-	log.Printf("删除 %d 条索引花费时间 %v", *num_delete_docs, t3.Sub(t2))
-
-	// 手动做 GC 防止影响性能测试
-	time.Sleep(time.Second)
-	runtime.GC()
-
 	// 写入内存profile文件
 	if *memprofile != "" {
 		f, err := os.Create(*memprofile)
@@ -170,35 +150,28 @@ func main() {
 		defer f.Close()
 	}
 
-	t4 := time.Now()
+	// 记录时间
+	t2 := time.Now()
+
 	done := make(chan bool)
-	recordResponse := recordResponseLock{}
-	recordResponse.count = make(map[string]int)
 	for iThread := 0; iThread < numQueryThreads; iThread++ {
-		go search(done, &recordResponse)
+		go search(done)
 	}
 	for iThread := 0; iThread < numQueryThreads; iThread++ {
 		<-done
 	}
 
 	// 记录时间并计算分词速度
-	t5 := time.Now()
+	t3 := time.Now()
 	log.Printf("搜索平均响应时间 %v 毫秒",
-		t5.Sub(t4).Seconds()*1000/float64(numRepeatQuery*len(searchQueries)))
+		t3.Sub(t2).Seconds()*1000/float64(numRepeatQuery*len(searchQueries)))
 	log.Printf("搜索吞吐量每秒 %v 次查询",
 		float64(numRepeatQuery*numQueryThreads*len(searchQueries))/
-			t5.Sub(t4).Seconds())
-
-	// 测试搜索结果输出，因为不同 case 的 docId 对应不上，所以只测试总数
-	recordResponse.RLock()
-	for keyword, count := range recordResponse.count {
-		log.Printf("关键词 [%s] 共搜索到 %d 个相关文档", keyword, count)
-	}
-	recordResponse.RUnlock()
+			t3.Sub(t2).Seconds())
 
 	if *use_persistent {
 		searcher.Close()
-		t6 := time.Now()
+		t4 := time.Now()
 		searcher1 := engine.Engine{}
 		searcher1.Init(types.EngineInitOptions{
 			SegmenterDictionaries: *dictionaries,
@@ -213,8 +186,8 @@ func main() {
 			PersistentStorageShards: *persistent_storage_shards,
 		})
 		defer searcher1.Close()
-		t7 := time.Now()
-		t := t7.Sub(t6).Seconds() - tEndInit.Sub(tBeginInit).Seconds()
+		t5 := time.Now()
+		t := t5.Sub(t4).Seconds() - tEndInit.Sub(tBeginInit).Seconds()
 		log.Print("从持久存储加入的索引总数", searcher1.NumTokenIndexAdded())
 		log.Printf("从持久存储建立索引花费时间 %v 秒", t)
 		log.Printf("从持久存储建立索引速度每秒添加 %f 百万个索引",
@@ -224,24 +197,10 @@ func main() {
 	//os.RemoveAll(*persistent_storage_folder)
 }
 
-type recordResponseLock struct {
-	sync.RWMutex
-	count map[string]int
-}
-
-func search(ch chan bool, record *recordResponseLock) {
+func search(ch chan bool) {
 	for i := 0; i < numRepeatQuery; i++ {
 		for _, query := range searchQueries {
-			output := searcher.Search(types.SearchRequest{Text: query})
-			record.RLock()
-			if _, found := record.count[query]; !found {
-				record.RUnlock()
-				record.Lock()
-				record.count[query] = len(output.Docs)
-				record.Unlock()
-			} else {
-				record.RUnlock()
-			}
+			searcher.Search(types.SearchRequest{Text: query})
 		}
 	}
 	ch <- true

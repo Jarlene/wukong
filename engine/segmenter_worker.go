@@ -5,25 +5,15 @@ import (
 )
 
 type segmenterRequest struct {
-	docId       uint64
-	hash        uint32
-	data        types.DocumentIndexData
-	forceUpdate bool
+	docId uint64
+	shard int
+	data  types.DocumentIndexData
 }
 
 func (engine *Engine) segmenterWorker() {
 	for {
 		request := <-engine.segmenterChannel
-		if request.docId == 0 {
-			if request.forceUpdate {
-				for i := 0; i < engine.initOptions.NumShards; i++ {
-					engine.indexerAddDocChannels[i] <- indexerAddDocumentRequest{forceUpdate: true}
-				}
-			}
-			continue
-		}
 
-		shard := engine.getShard(request.hash)
 		tokensMap := make(map[string][]int)
 		numTokens := 0
 		if !engine.initOptions.NotUsingSegmenter && request.data.Content != "" {
@@ -50,16 +40,10 @@ func (engine *Engine) segmenterWorker() {
 		for _, label := range request.data.Labels {
 			if !engine.initOptions.NotUsingSegmenter {
 				if !engine.stopTokens.IsStopToken(label) {
-					//当正文中已存在关键字时，若不判断，位置信息将会丢失
-					if _, ok := tokensMap[label]; !ok {
-						tokensMap[label] = []int{}
-					}
-				}
-			} else {
-				//当正文中已存在关键字时，若不判断，位置信息将会丢失
-				if _, ok := tokensMap[label]; !ok {
 					tokensMap[label] = []int{}
 				}
+			} else {
+				tokensMap[label] = []int{}
 			}
 		}
 
@@ -69,7 +53,6 @@ func (engine *Engine) segmenterWorker() {
 				TokenLength: float32(numTokens),
 				Keywords:    make([]types.KeywordIndex, len(tokensMap)),
 			},
-			forceUpdate: request.forceUpdate,
 		}
 		iTokens := 0
 		for k, v := range tokensMap {
@@ -81,17 +64,16 @@ func (engine *Engine) segmenterWorker() {
 			iTokens++
 		}
 
-		engine.indexerAddDocChannels[shard] <- indexerRequest
-		if request.forceUpdate {
-			for i := 0; i < engine.initOptions.NumShards; i++ {
-				if i == shard {
-					continue
-				}
-				engine.indexerAddDocChannels[i] <- indexerAddDocumentRequest{forceUpdate: true}
-			}
-		}
+		var dealDocInfoChan = make(chan bool, 1)
+
+		indexerRequest.dealDocInfoChan = dealDocInfoChan
+		engine.indexerAddDocumentChannels[request.shard] <- indexerRequest
+
 		rankerRequest := rankerAddDocRequest{
-			docId: request.docId, fields: request.data.Fields}
-		engine.rankerAddDocChannels[shard] <- rankerRequest
+			docId:           request.docId,
+			fields:          request.data.Fields,
+			dealDocInfoChan: dealDocInfoChan,
+		}
+		engine.rankerAddDocChannels[request.shard] <- rankerRequest
 	}
 }

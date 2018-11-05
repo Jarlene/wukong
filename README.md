@@ -2,7 +2,7 @@
 ======
 
 * [高效索引和搜索](/docs/benchmarking.md)（1M条微博500M数据28秒索引完，1.65毫秒搜索响应时间，19K搜索QPS）
-* 支持中文分词（使用[sego分词包](https://github.com/huichen/sego)并发分词，速度27MB/秒）
+* 支持中文分词（使用[sego分词包](https://github.com/Jarlene/sego)并发分词，速度27MB/秒）
 * 支持计算关键词在文本中的[紧邻距离](/docs/token_proximity.md)（token proximity）
 * 支持计算[BM25相关度](/docs/bm25.md)
 * 支持[自定义评分字段和评分规则](/docs/custom_scoring_criteria.md)
@@ -16,7 +16,7 @@
 # 安装/更新
 
 ```
-go get -u -v github.com/huichen/wukong
+go get -u -v github.com/Jarlene/wukong
 ```
 
 需要Go版本至少1.1.1
@@ -28,8 +28,8 @@ go get -u -v github.com/huichen/wukong
 package main
 
 import (
-	"github.com/huichen/wukong/engine"
-	"github.com/huichen/wukong/types"
+	"github.com/Jarlene/wukong/engine"
+	"github.com/Jarlene/wukong/types"
 	"log"
 )
 
@@ -41,13 +41,13 @@ var (
 func main() {
 	// 初始化
 	searcher.Init(types.EngineInitOptions{
-		SegmenterDictionaries: "github.com/huichen/wukong/data/dictionary.txt"})
+		SegmenterDictionaries: "github.com/Jarlene/wukong/data/dictionary.txt"})
 	defer searcher.Close()
 
-	// 将文档加入索引，docId 从1开始
-	searcher.IndexDocument(1, types.DocumentIndexData{Content: "此次百度收购将成中国互联网最大并购"}, false)
-	searcher.IndexDocument(2, types.DocumentIndexData{Content: "百度宣布拟全资收购91无线业务"}, false)
-	searcher.IndexDocument(3, types.DocumentIndexData{Content: "百度是中国最大的搜索引擎"}, false)
+	// 将文档加入索引
+	searcher.IndexDocument(0, types.DocumentIndexData{Content: "此次百度收购将成中国互联网最大并购"})
+	searcher.IndexDocument(1, types.DocumentIndexData{Content: "百度宣布拟全资收购91无线业务"})
+	searcher.IndexDocument(2, types.DocumentIndexData{Content: "百度是中国最大的搜索引擎"})
 
 	// 等待索引刷新完毕
 	searcher.FlushIndex()

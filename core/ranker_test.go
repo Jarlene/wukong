@@ -32,10 +32,22 @@ func (criteria DummyScoringCriteria) Score(
 
 func TestRankDocument(t *testing.T) {
 	var ranker Ranker
-	ranker.Init()
-	ranker.AddDoc(1, DummyScoringFields{})
-	ranker.AddDoc(3, DummyScoringFields{})
-	ranker.AddDoc(4, DummyScoringFields{})
+	ranker.Init(5)
+	c1 := make(chan bool)
+	c2 := make(chan bool)
+	c3 := make(chan bool)
+	close(c1)
+	close(c2)
+	close(c3)
+	ranker.AddDoc(1, DummyScoringFields{},
+		c1,
+	)
+	ranker.AddDoc(3, DummyScoringFields{},
+		c2,
+	)
+	ranker.AddDoc(4, DummyScoringFields{},
+		c3,
+	)
 
 	scoredDocs, _ := ranker.Rank([]types.IndexedDocument{
 		types.IndexedDocument{DocId: 1, BM25: 6},
@@ -56,27 +68,41 @@ func TestRankDocument(t *testing.T) {
 
 func TestRankWithCriteria(t *testing.T) {
 	var ranker Ranker
-	ranker.Init()
+	ranker.Init(5)
+	c1 := make(chan bool)
+	c2 := make(chan bool)
+	c3 := make(chan bool)
+	close(c1)
+	close(c2)
+	close(c3)
 	ranker.AddDoc(1, DummyScoringFields{
 		label:   "label3",
 		counter: 3,
 		amount:  22.3,
-	})
+	},
+		c1,
+	)
 	ranker.AddDoc(2, DummyScoringFields{
 		label:   "label4",
 		counter: 1,
 		amount:  2,
-	})
+	},
+		c2,
+	)
 	ranker.AddDoc(3, DummyScoringFields{
 		label:   "label1",
 		counter: 7,
 		amount:  10.3,
-	})
+	},
+		c3,
+	)
 	ranker.AddDoc(4, DummyScoringFields{
 		label:   "label1",
 		counter: -1,
 		amount:  2.3,
-	})
+	},
+		c1,
+	)
 
 	criteria := DummyScoringCriteria{}
 	scoredDocs, _ := ranker.Rank([]types.IndexedDocument{
@@ -97,24 +123,32 @@ func TestRankWithCriteria(t *testing.T) {
 	utils.Expect(t, "[1 [25300 ]] [3 [17300 ]] ", scoredDocsToString(scoredDocs))
 }
 
-func TestRemoveDoc(t *testing.T) {
+func TestRemoveDocument(t *testing.T) {
 	var ranker Ranker
-	ranker.Init()
+	ranker.Init(6)
+	c := make(chan bool)
+	close(c)
 	ranker.AddDoc(1, DummyScoringFields{
 		label:   "label3",
 		counter: 3,
 		amount:  22.3,
-	})
+	},
+		c,
+	)
 	ranker.AddDoc(2, DummyScoringFields{
 		label:   "label4",
 		counter: 1,
 		amount:  2,
-	})
+	},
+		c,
+	)
 	ranker.AddDoc(3, DummyScoringFields{
 		label:   "label1",
 		counter: 7,
 		amount:  10.3,
-	})
+	},
+		c,
+	)
 	ranker.RemoveDoc(3)
 
 	criteria := DummyScoringCriteria{}

@@ -24,12 +24,12 @@ const (
 )
 
 var (
-	searcher = engine.Engine{}
-	wbs      = map[uint64]Weibo{}
-	weiboData = flag.String("weibo_data", "../../testdata/weibo_data.txt", "微博数据文件")
-	dictFile = flag.String("dict_file", "../../data/dictionary.txt", "词典文件")
+	searcher      = engine.Engine{}
+	wbs           = map[uint64]Weibo{}
+	weiboData     = flag.String("weibo_data", "../../testdata/weibo_data.txt", "微博数据文件")
+	dictFile      = flag.String("dict_file", "../../data/dictionary.txt", "词典文件")
 	stopTokenFile = flag.String("stop_token_file", "../../data/stop_tokens.txt", "停用词文件")
-	staticFolder = flag.String("static_folder", "static", "静态文件目录")
+	staticFolder  = flag.String("static_folder", "static", "静态文件目录")
 )
 
 type Weibo struct {
@@ -152,6 +152,7 @@ func main() {
 	gob.Register(WeiboScoringFields{})
 	log.Print("引擎开始初始化")
 	searcher.Init(types.EngineInitOptions{
+		NumShards:             10,
 		SegmenterDictionaries: *dictFile,
 		StopTokenFile:         *stopTokenFile,
 		IndexerInitOptions: &types.IndexerInitOptions{
@@ -160,8 +161,8 @@ func main() {
 		// 如果你希望使用持久存储，启用下面的选项
 		// 默认使用boltdb持久化，如果你希望修改数据库类型
 		// 请修改 WUKONG_STORAGE_ENGINE 环境变量
-		// UsePersistentStorage: true,
-		// PersistentStorageFolder: "weibo_search",
+		UsePersistentStorage:    true,
+		PersistentStorageFolder: "weibo_search",
 	})
 	log.Print("引擎初始化完毕")
 	wbs = make(map[uint64]Weibo)

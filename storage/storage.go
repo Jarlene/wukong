@@ -9,8 +9,8 @@ const DEFAULT_STORAGE_ENGINE = "ldb"
 
 var supportedStorage = map[string]func(path string) (Storage, error){
 	"kv":   openKVStorage,
+	"ldb":  OpenLeveldbStorage,
 	"bolt": openBoltStorage,
-	"ldb": openLeveldbStorage,
 }
 
 func RegisterStorageEngine(name string, fn func(path string) (Storage, error)) {
