@@ -434,6 +434,22 @@ func (engine *Engine) Close() {
 	}
 }
 
+func (engine *Engine) Clear() {
+	if engine.initOptions.UsePersistentStorage {
+		for _, db := range engine.dbs {
+
+			db[0].ForEach(func(k, v []byte) error {
+				return db[0].Delete(k)
+			})
+			db[1].ForEach(func(k, v []byte) error {
+				return db[1].Delete(k)
+			})
+			db[0].Close()
+			db[1].Close()
+		}
+	}
+}
+
 // 获取数据库类别索引
 func getDB(typ string) int {
 	switch typ {
